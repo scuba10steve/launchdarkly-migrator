@@ -1,6 +1,7 @@
 import argparse
 import launchdarkly_api
 from launchdarkly_api.models import Project, FeatureFlags, FeatureFlag, FeatureFlagBody, FeatureFlagStatus, PatchComment, PatchOperation, FeatureFlagConfig
+from launchdarkly_api.rest import ApiException
 
 
 
@@ -41,7 +42,11 @@ def main():
         destination_environments = [environment.key for environment in destination_project.environments]
 
         print(f"Creating '{new_flag.name}' in project '{destination_project.name}'...")
-        feature_flags_client.post_feature_flag(destination_project.key, new_flag)
+        try:
+            feature_flags_client.get_feature_flag(destination_project.key, new_flag.key)
+        except ApiException as api:
+            if api.status == 404:
+                feature_flags_client.post_feature_flag(destination_project.key, new_flag)
 
         for env in [environment.key for environment in source_project.environments]:
             if env in destination_environments:
@@ -50,10 +55,6 @@ def main():
                 operations: List[PatchOperation] = []
 
                 if config[env].targets:
-                    for target in config[env].targets:
-                        target.id = ""
-                        for clause in target.clauses:
-                            clause.id = ""
                     operations.append(PatchOperation("replace", f"/environments/{env}/targets", config[env].targets))
 
                 if config[env].rules:
@@ -74,7 +75,6 @@ def main():
                     update = PatchComment(f"updating rules from prior project '{source_project.name}'", operations)
                     print(f"Updating rules for flag '{new_flag.name}' in project '{destination_project.name}'")
                     feature_flags_client.patch_feature_flag(destination_project.key, new_flag.key, update)
-                # exit(0)
 
 
 if __name__ == "__main__":
